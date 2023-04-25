@@ -5,80 +5,75 @@ print('AppEngine Version: ' .. Engine.getVersion())
 local DELAY = 1000 -- ms between visualization steps for demonstration purpose
 
 -- Creating viewer
-local viewer = View.create('viewer2D1')
+local viewer = View.create()
 
 -- Setting up graphical overlay attributes
 local textDeco = View.TextDecoration.create() -- "Teach" or "Match" mode, top left corner
-textDeco:setSize(30)
-textDeco:setPosition(20, 30)
+textDeco:setSize(30):setPosition(20, 30)
 
 local text2Deco = View.TextDecoration.create() -- "Number of matches", top right corner
-text2Deco:setSize(30)
-text2Deco:setPosition(520, 30)
+text2Deco:setSize(30):setPosition(520, 30)
 
 local decoration = View.ShapeDecoration.create() -- Color scheme for text and points
-decoration:setPointSize(5)
-decoration:setLineColor(0, 0, 230) -- Blue for "Teach" mode
+decoration:setPointSize(5):setLineColor(0, 0, 230) -- Blue for "Teach" mode
 decoration:setPointType('DOT')
 
 -- Creating matcher
 local matcher = Image.Matching.EdgeMatcher.create()
 matcher:setEdgeThreshold(30)
 local wantedDownsampleFactor = 2
-matcher:setDownsampleFactor(wantedDownsampleFactor) 
+matcher:setDownsampleFactor(wantedDownsampleFactor)
 matcher:setMaxMatches(10)
 
 --End of Global Scope-----------------------------------------------------------
 
 --Start of Function and Event Scope---------------------------------------------
 
--- Teaching
---@teach(img:Image)
+--- Teaching
+---@param img Image
 local function teach(img)
   viewer:clear()
-  local imageID = viewer:addImage(img)
+  viewer:addImage(img)
   -- Add "Teach" text overlay
-  viewer:addText('Teach', textDeco, nil, imageID)
+  viewer:addText('Teach', textDeco)
 
   -- Defining teach region
   local teachRectCenter = Point.create(312, 235)
   local teachRect = Shape.createRectangle(teachRectCenter, 120, 110, 0)
-  viewer:addShape(teachRect, decoration, nil, imageID)
+  viewer:addShape(teachRect, decoration)
   local teachRegion = teachRect:toPixelRegion(img)
 
   -- Check if wanted downsample factor is supported by device
-  minDsf,_ = matcher:getDownsampleFactorLimits(img)
+  local minDsf,_ = matcher:getDownsampleFactorLimits(img)
   if (minDsf > wantedDownsampleFactor) then
     print("Cannot use downsample factor " .. wantedDownsampleFactor .. " will use " .. minDsf .. " instead") 
     matcher:setDownsampleFactor(minDsf)
   end
-  
+
   -- Teaching edge matcher
   local teachPose = matcher:teach(img, teachRegion)
 
   -- Viewing model points overlayed in teach image
-  local modelPoints = matcher:getEdgePoints() -- Model points in model's local coord syst
+  local modelPoints = matcher:getModelPoints() -- Model points in model's local coord syst
   local teachPoints = Point.transform(modelPoints, teachPose)
-  for _, point in ipairs(teachPoints) do
-    viewer:addShape(point, decoration, nil, imageID)
-  end
+  viewer:addShape(teachPoints, decoration)
   viewer:present()
 end
 
--- Matching
---@match(img:Image,i:int)
+---@param img Image
+---@param i int
 local function match(img, i)
   -- Changing color scheme to green for "Match" mode
   decoration:setLineColor(0, 210, 0)
   decoration:setLineWidth(5)
   viewer:clear()
-  local imageID = viewer:addImage(img)
+  viewer:addImage(img)
   -- Adding "Match #" text overlay
-  viewer:addText('Match ' .. tostring(i), textDeco, nil, imageID)
+  viewer:addText('Match ' .. tostring(i), textDeco)
+  viewer:present()
 
   -- Finding object pose
-  local poses,
-    scores = matcher:match(img)
+  local poses, scores = matcher:match(img)
 
   -- Finding index of first match with score less than minimum score
   local minscore = 0.8 -- Minimum score to count as a found object
@@ -88,14 +83,12 @@ local function match(img, i)
   for j = 1, #scores do
     if scores[j] >= minscore then
       local outlines = Shape.transform(matcher:getModelContours(), poses[j])
-      for _, outline in ipairs(outlines) do
-        viewer:addShape(outline, decoration, nil, imageID)
-      end
+      viewer:addShape(outlines, decoration)
       validScores = validScores + 1
+      viewer:present('ASSURED')
     end
   end
-  viewer:present()
-  viewer:addText('# = ' .. tostring(validScores), text2Deco, nil, imageID)
+  viewer:addText('# = ' .. tostring(validScores), text2Deco)
   viewer:present()
   print('Valid Matches: ' .. validScores)
   Script.sleep(DELAY * 2) -- for demonstration purpose only
